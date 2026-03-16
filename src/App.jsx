@@ -914,19 +914,17 @@ export default function PICalculator() {
     })();
   }, []);
 
-  // ── Price fetch via Vercel proxy (auto on mount, retries on manual click) ──
+  // ── Price fetch – calls Goonmetrics directly ──
+  // On Vercel: replace the URL with "/api/prices" to use the serverless proxy
   const fetchPrices = async () => {
     setPriceStatus("loading");
     try {
-      // On Vercel: calls /api/prices (serverless function that proxies Goonmetrics + caches 1h)
-      // Locally / in Artifact: falls back to direct API call
-      let url = "/api/prices";
-
+      const allIds = Object.values(TYPE_IDS).join(",");
+      const url = `https://goonmetrics.apps.gnf.lt/api/price_data/?station_id=60003760&type_id=${allIds}`;
       const resp = await fetch(url);
       if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
       const xmlText = await resp.text();
 
-      // Parse XML: <type id="2867"><sell><min>1922000.00</min></sell><buy><max>1892000.00</max></buy></type>
       const parser = new DOMParser();
       const doc = parser.parseFromString(xmlText, "text/xml");
       const types = doc.querySelectorAll("type");
@@ -947,8 +945,7 @@ export default function PICalculator() {
     }
   };
 
-  // Auto-fetch prices on mount
-  useEffect(() => { fetchPrices(); }, []);
+  // No auto-fetch – prices loaded on button press only
 
   // helper: get sell price by item name
   const getPrice = name => {
