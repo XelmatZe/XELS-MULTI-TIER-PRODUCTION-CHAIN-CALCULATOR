@@ -173,16 +173,23 @@ function parseStock(text) {
   const lines = text.split(/\n/).map(l => l.trim()).filter(Boolean);
 
   lines.forEach(line => {
-    // Remove commas/dots used as thousand separators
-    const clean = line.replace(/,/g, "");
-    // Extract all numbers from line
-    const nums = clean.match(/\d+/g);
-    if (!nums) return;
-    const qty = parseInt(nums[nums.length - 1]);
+    // Remove both commas and dots used as thousand separators.
+    // Since we never have decimals, any comma or dot is a thousand separator.
+    // Strategy: extract the number portion first, strip separators from it,
+    // then parse as integer.
+
+    // Find the number in the line (digits with optional . or , between them)
+    const numMatch = line.match(/[\d][0-9.,]*/);
+    if (!numMatch) return;
+
+    const rawNum = numMatch[0];
+    // Strip all dots and commas → pure integer string
+    const cleanNum = rawNum.replace(/[.,]/g, "");
+    const qty = parseInt(cleanNum, 10);
     if (!qty || qty <= 0) return;
 
-    // Remove the number from the line to get the item name candidate
-    const nameCandidate = clean.replace(/\d+/g, "").trim().toLowerCase();
+    // Remove the raw number portion to get the item name
+    const nameCandidate = line.replace(rawNum, "").replace(/\d/g, "").trim().toLowerCase();
 
     // Find best match among known items (case-insensitive)
     const match = ALL_ITEMS.find(item =>
@@ -597,6 +604,7 @@ function ColHeaders({ tier }) {
 // Full collapsible result section with price columns
 function ResultSection({ tier, label, gross, net, stock, getPrice }) {
   const [open, setOpen] = useState(true);
+  const [copied, setCopied] = useState(false);
   const color = TIER_COLORS[tier];
   const entries = Object.entries(gross).sort((a, b) => b[1] - a[1]);
   if (entries.length === 0) return <></>;
@@ -606,6 +614,21 @@ function ResultSection({ tier, label, gross, net, stock, getPrice }) {
     const p = getPrice ? getPrice(n) : 0;
     return s + nv * p;
   }, 0);
+
+  const handleCopy = (e) => {
+    e.stopPropagation();
+    const lines = entries
+      .map(([n, g]) => {
+        const nv = net[n] !== undefined ? net[n] : Math.max(0, g - (stock[n]||0));
+        return nv > 0 ? `${n}\t${nv}` : null;
+      })
+      .filter(Boolean)
+      .join("\n");
+    navigator.clipboard.writeText(lines).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    });
+  };
 
   return (
     <div style={{ background: "#0d1526", border: `1px solid ${color}28`, borderRadius: 12, overflow: "hidden" }}>
@@ -618,8 +641,18 @@ function ResultSection({ tier, label, gross, net, stock, getPrice }) {
         <span style={{ fontSize: "0.66rem", letterSpacing: "0.18em", color, fontWeight: 700, textTransform: "uppercase" }}>
           {label} <span style={{ opacity: 0.5, fontWeight: 400 }}>· {entries.length} items</span>
         </span>
-        <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
           {totalNetValue > 0 && <span style={{ fontSize: "0.68rem", color: "#f59e0b", fontWeight: 700 }}>{fmtISK(totalNetValue)} ISK</span>}
+          <button onClick={handleCopy} style={{
+            background: copied ? "#061810" : "#0a1020",
+            border: `1px solid ${copied ? "#34d39950" : color + "40"}`,
+            color: copied ? "#34d399" : color,
+            fontSize: "0.6rem", fontWeight: 700, padding: "3px 10px",
+            borderRadius: 5, cursor: "pointer", fontFamily: "inherit",
+            letterSpacing: "0.08em", transition: "all 0.2s",
+          }}>
+            {copied ? "✓ COPIED" : "⎘ COPY NET"}
+          </button>
           <span style={{ color, fontSize: "0.85rem" }}>{open ? "▲" : "▼"}</span>
         </div>
       </div>
@@ -642,6 +675,7 @@ function ResultSection({ tier, label, gross, net, stock, getPrice }) {
 // P1 result section with price columns
 function P1ResultSection({ grossData, netData, stock, getPrice }) {
   const [open, setOpen] = useState(true);
+  const [copied, setCopied] = useState(false);
   const color = TIER_COLORS.p1;
   const entries = Object.entries(grossData).sort((a, b) => b[1] - a[1]);
   const total = entries.reduce((s, [, v]) => s + v, 0);
@@ -651,6 +685,21 @@ function P1ResultSection({ grossData, netData, stock, getPrice }) {
     const p = getPrice ? getPrice(n) : 0;
     return s + nv * p;
   }, 0);
+
+  const handleCopy = (e) => {
+    e.stopPropagation();
+    const lines = entries
+      .map(([n, g]) => {
+        const nv = netData[n] !== undefined ? netData[n] : Math.max(0, g - (stock[n]||0));
+        return nv > 0 ? `${n}\t${nv}` : null;
+      })
+      .filter(Boolean)
+      .join("\n");
+    navigator.clipboard.writeText(lines).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    });
+  };
 
   return (
     <div style={{ background: "#0d1526", border: `1px solid ${color}28`, borderRadius: 12, overflow: "hidden" }}>
@@ -663,8 +712,18 @@ function P1ResultSection({ grossData, netData, stock, getPrice }) {
         <span style={{ fontSize: "0.66rem", letterSpacing: "0.18em", color, fontWeight: 700, textTransform: "uppercase" }}>
           P1 — Processed Materials Required <span style={{ opacity: 0.5, fontWeight: 400 }}>· {entries.length} materials</span>
         </span>
-        <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
           {totalNetValue > 0 && <span style={{ fontSize: "0.68rem", color: "#f59e0b", fontWeight: 700 }}>{fmtISK(totalNetValue)} ISK</span>}
+          <button onClick={handleCopy} style={{
+            background: copied ? "#061810" : "#0a1020",
+            border: `1px solid ${copied ? "#34d39950" : color + "40"}`,
+            color: copied ? "#34d399" : color,
+            fontSize: "0.6rem", fontWeight: 700, padding: "3px 10px",
+            borderRadius: 5, cursor: "pointer", fontFamily: "inherit",
+            letterSpacing: "0.08em", transition: "all 0.2s",
+          }}>
+            {copied ? "✓ COPIED" : "⎘ COPY NET"}
+          </button>
           <span style={{ color, fontSize: "0.85rem" }}>{open ? "▲" : "▼"}</span>
         </div>
       </div>
@@ -692,67 +751,6 @@ function P1ResultSection({ grossData, netData, stock, getPrice }) {
             </span>
           </div>
         </>
-      )}
-    </div>
-  );
-}
-
-function NetOverview({ p1Gross, p1Net }) {
-  const [copied, setCopied] = useState(false);
-
-  const entries = Object.entries(p1Gross).sort((a, b) => b[1] - a[1]);
-  const netEntries = entries.map(([n, g]) => [n, p1Net[n] !== undefined ? p1Net[n] : g]);
-  const needed = netEntries.filter(([, net]) => net > 0);
-
-  const handleCopy = () => {
-    const text = needed.map(([n, net]) => `${n}\t${net}`).join("\n");
-    navigator.clipboard.writeText(text).then(() => {
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    });
-  };
-
-  return (
-    <div style={{ background: "#0a0f1e", border: "1px solid #1e3a5f", borderRadius: 12, padding: "12px 18px" }}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
-        <div style={{ fontSize: "0.6rem", color: "#334155", letterSpacing: "0.18em" }}>
-          P1 NET REQUIREMENTS OVERVIEW
-        </div>
-        {needed.length > 0 && (
-          <button
-            onClick={handleCopy}
-            style={{
-              background: copied ? "#061810" : "#0a1428",
-              border: `1px solid ${copied ? "#34d39950" : "#1e3a5f"}`,
-              color: copied ? "#34d399" : "#93c5fd",
-              fontSize: "0.62rem", fontWeight: 700, padding: "4px 12px",
-              borderRadius: 6, cursor: "pointer", fontFamily: "inherit",
-              letterSpacing: "0.1em", transition: "all 0.2s",
-            }}
-          >
-            {copied ? "✓ COPIED" : "⎘ COPY NET"}
-          </button>
-        )}
-      </div>
-      <div style={{ display: "flex", flexWrap: "wrap", gap: "5px 8px" }}>
-        {netEntries.map(([n, net]) => (
-          <div key={n} style={{
-            background: net === 0 ? "#061810" : "#111827",
-            borderRadius: 6, padding: "3px 10px",
-            fontSize: "0.72rem", display: "flex", gap: 7, alignItems: "center",
-            border: `1px solid ${net === 0 ? "#34d39940" : "#1a2d45"}`,
-          }}>
-            <span style={{ color: net === 0 ? "#34d39970" : "#475569" }}>{n}</span>
-            <span style={{ color: net === 0 ? "#34d399" : "#94a3b8", fontWeight: 700 }}>
-              {net === 0 ? "✓" : fmt(net)}
-            </span>
-          </div>
-        ))}
-      </div>
-      {needed.length === 0 && entries.length > 0 && (
-        <div style={{ fontSize: "0.75rem", color: "#34d399", marginTop: 6 }}>
-          ✓ All P1 materials are covered by your stock!
-        </div>
       )}
     </div>
   );
@@ -898,29 +896,37 @@ export default function PICalculator() {
   const [p2q, setP2q] = useState(emptyQty(Object.keys(P2)));
   const [stock, setStock] = useState({});
   const [visitCount, setVisitCount] = useState(null);
-  const [prices, setPrices] = useState({});       // { typeId: { sell, buy } }
-  const [priceStatus, setPriceStatus] = useState("idle"); // idle | loading | ok | error
+  const [prices, setPrices] = useState({});
+  const [priceStatus, setPriceStatus] = useState("idle");
 
-  // ── Visit counter ──
+  // Detect environment: on Vercel /api/prices exists, in Claude it doesn't
+  const isVercel = typeof window !== "undefined" && window.location.hostname !== "null"
+    && !window.location.hostname.includes("claude")
+    && window.location.hostname !== "localhost";
+
+  // ── Visit counter via countapi.dev (works everywhere) ──
   useEffect(() => {
     (async () => {
       try {
-        let current = 0;
-        try { const r = await window.storage.get("pi_visit_count", true); current = parseInt(r.value) || 0; } catch (_) {}
-        const next = current + 1;
-        await window.storage.set("pi_visit_count", String(next), true);
-        setVisitCount(next);
-      } catch (_) { setVisitCount(null); }
+        // countapi.dev – free, no signup, persists globally
+        const resp = await fetch("https://api.countapi.xyz/hit/eve-pi-calculator-xelmatze/visits");
+        if (!resp.ok) throw new Error();
+        const data = await resp.json();
+        setVisitCount(data.value);
+      } catch (_) {
+        // Silent fallback – hide counter if unavailable
+        setVisitCount(null);
+      }
     })();
   }, []);
 
-  // ── Price fetch – calls Goonmetrics directly ──
-  // On Vercel: replace the URL with "/api/prices" to use the serverless proxy
+  // ── Price fetch – always via /api/prices Vercel proxy ──
   const fetchPrices = async () => {
     setPriceStatus("loading");
     try {
-      const allIds = Object.values(TYPE_IDS).join(",");
-      const url = `https://goonmetrics.apps.gnf.lt/api/price_data/?station_id=60003760&type_id=${allIds}`;
+      // Always use the Vercel serverless proxy – avoids CORS, cached 1h at edge
+      const url = `/api/prices`;
+
       const resp = await fetch(url);
       if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
       const xmlText = await resp.text();
@@ -944,8 +950,6 @@ export default function PICalculator() {
       setPriceStatus("error");
     }
   };
-
-  // No auto-fetch – prices loaded on button press only
 
   // helper: get sell price by item name
   const getPrice = name => {
@@ -1125,9 +1129,6 @@ export default function PICalculator() {
             {Object.keys(res.p1Gross).length > 0 && (
               <P1ResultSection grossData={res.p1Gross} netData={res.p1Net} stock={stock} getPrice={getPrice} />
             )}
-
-            {/* P1 Quick chips – net values */}
-            <NetOverview p1Gross={res.p1Gross} p1Net={res.p1Net} />
 
           </div>
         )}
